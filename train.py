@@ -11,6 +11,7 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import OneHotEncoder
+from sklearn.utils import class_weight
 
 from methods.methods import *
 from methods.model import *
@@ -42,7 +43,6 @@ parser.add_argument('-wf', '--weights_file', type=str, default='test.hdf5', help
 
 args = parser.parse_args()
 
-
 """HYPERPARAMETERS"""
 IMAGE_SIZE = args.image_height      # equal in both dimensions
 EPOCHS = args.epochs                # number of epochs in training
@@ -53,6 +53,15 @@ NUM_OF_CLASSES = args.classes       # number of classes to be detected
 LOAD_WEIGHTS = args.load_weights    # True - load weights from the file, False - don't load the saved weights
 WEIGHTS_FILE = args.weights_file    # file with the model weights
 
+print(f"Launching the training file with the following parameters:\n\
+        Batch size: {BATCH}\n\
+        Epochs: {EPOCHS}\n\
+        Image size: {IMAGE_SIZE}\n\
+        Learning rate: {LR}\n\
+        Path to the data: {PATH}\n\
+        Number of classes: {NUM_OF_CLASSES}\n\
+        Loading weights from a file: {LOAD_WEIGHTS}\n\
+        Weights file: {WEIGHTS_FILE}")
 
 """TRAINING/LOADING WEIGHTS"""
 (train_x, train_y), (valid_x, valid_y), (test_x, test_y) = load_data(PATH)
@@ -74,18 +83,22 @@ model = model()
 # model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])      # compile the model
 model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=[MeanIoU(num_classes=NUM_OF_CLASSES)])    # compile the model
 
+# if LOAD_WEIGHTS:
+if LOAD_WEIGHTS:
+    print("Loading weights...")
+    model.load_weights(WEIGHTS_FILE)
+    print("Weights loaded!")
+
+
+"""TRAINING PARAMETERS"""
 callbacks = [
     ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=4),
     EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True),
     ModelCheckpoint(WEIGHTS_FILE, save_best_only=True, monitor='val_loss', mode='min')
 ]
 
-"""TRAIN"""
-if LOAD_WEIGHTS:
-    print("Loading weights...")
-    model.load_weights(WEIGHTS_FILE)
-    print("Weights loaded!")
 
+"""TRAIN"""
 print("Starting training...")
 model.fit(
     train_dataset,

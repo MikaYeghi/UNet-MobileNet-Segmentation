@@ -1,8 +1,11 @@
 import os, argparse
 import cv2
+from sklearn.utils import class_weight
 import tensorflow as tf
 import numpy as np
 from glob import glob
+from tensorflow.python.ops.gen_array_ops import reshape
+from tqdm import tqdm
 from sklearn.model_selection import train_test_split
 
 def load_data(path, split=0.1):
@@ -26,12 +29,27 @@ def load_data(path, split=0.1):
     train_x, valid_x = train_test_split(images, test_size=valid_size, random_state=42)      # split X into train/val
     train_y, valid_y = train_test_split(masks, test_size=valid_size, random_state=42)       # split y into train/val
 
-    print(train_x[0], train_y[0])
-
     train_x, test_x = train_test_split(train_x, test_size=test_size, random_state=42)       # split X into train/test
     train_y, test_y = train_test_split(train_y, test_size=test_size, random_state=42)       # split y into train/test
 
     return (train_x, train_y), (valid_x, valid_y), (test_x, test_y)
+
+def make_dataset(Xs, ys, IMAGE_SIZE=256, skip_counter=1):
+    images = []
+    print("Reading RGB images.")
+    for img_path in tqdm(Xs[::skip_counter]):
+        img = read_image(img_path, decode=False)
+        images.append(img)
+    images = np.array(images)
+
+    masks = []
+    print("Reading grayscale masks.")
+    for mask_path in tqdm(ys[::skip_counter]):
+        mask = read_mask(mask_path, decode=False)
+        masks.append(mask)        
+    masks = np.array(masks)
+
+    return images, masks
 
 def read_image(path, image_size=256, decode=True):                  # returns a (IMAGE_SIZE, IMAGE_SIZE, 3) tensor (RGB)
     if decode:
@@ -90,3 +108,25 @@ def str2bool(v):
         return False
     else:
         raise argparse.ArgumentTypeError('Boolean value expected.')
+    
+def get_class_weights(path):
+    path += "masks/"                # folder containing masks is "masks"
+    os.chdir(path)                  # enter masks
+
+    mask_filenames = os.listdir()   # list of filenames in masks
+    mask_labels = np.array([])      # initialize empty array with labels from masks
+
+    print("Reading mask files for estimating class weights...")
+
+    for mask_filename in tqdm(mask_filenames):
+        mask = read_mask(mask_filename, decode=False)           # read one-hot encoded masks
+        mask = np.argmax(mask, axis=2)                          # argmax them
+        reshaped_mask = mask.reshape(-1, 1)                     # convert into 1d
+        mask_labels = np.append(mask_labels, reshaped_mask)     # append to the labels array
+
+    class_weights = class_weight.compute_class_weight('balanced', np.unique(mask_labels), mask_labels)      # compute labels
+    num_of_classes = np.unique(mask_labels).shape[0]
+    print("Number of classes is ", num_of_classes)
+    class_weights = dict(zip(range(num_of_classes), list(class_weights)))
+    os.chdir("../..")
+    return class_weights
