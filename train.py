@@ -81,7 +81,9 @@ if len(valid_x) % BATCH != 0:
 """INITIALIZE MODEL"""
 model = model()
 # model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])      # compile the model
-model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=[MeanIoU(num_classes=NUM_OF_CLASSES)])    # compile the model
+model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=[MeanIoU(num_classes=NUM_OF_CLASSES), 
+                                    tf.keras.metrics.Precision(), 
+                                    tf.keras.metrics.Recall()])    # compile the model
 
 # if LOAD_WEIGHTS:
 if LOAD_WEIGHTS:
@@ -111,6 +113,6 @@ model.fit(
 )
 print("Training finished!")
 
-print("Saving the model...")
+print(f"Saving the model as {WEIGHTS_FILE}...")
 model.save(WEIGHTS_FILE)
 print("Model saved!")

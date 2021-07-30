@@ -38,14 +38,14 @@ def make_dataset(Xs, ys, IMAGE_SIZE=256, skip_counter=1):
     images = []
     print("Reading RGB images.")
     for img_path in tqdm(Xs[::skip_counter]):
-        img = read_image(img_path, decode=False)
+        img = read_image(img_path, image_size=IMAGE_SIZE, decode=False)
         images.append(img)
     images = np.array(images)
 
     masks = []
     print("Reading grayscale masks.")
     for mask_path in tqdm(ys[::skip_counter]):
-        mask = read_mask(mask_path, decode=False)
+        mask = read_mask(mask_path, image_size=IMAGE_SIZE, decode=False)
         masks.append(mask)        
     masks = np.array(masks)
 
