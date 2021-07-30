@@ -13,13 +13,9 @@ import matplotlib.pyplot as plt
 parser = argparse.ArgumentParser(description='Predicti with UNet with MobileNet')
 parser.add_argument('-p', '--path', type=str, help='path to the image or directory for prediction')
 parser.add_argument('-s', '--save_path', type=str, default='preds/', help='path where predictions are saved')
-# parser.add_argument('-e', '--epochs', type=int, default=5, help='number of epochs')
-# parser.add_argument('-lr', '--learning_rate', type=float, default=1e-3, help='learning rate')
 parser.add_argument('-he', '--image_height', type=int, default=256, help='image height')
 parser.add_argument('-wi', '--image_width', type=int, default=256, help='image width')
-# parser.add_argument('-dp', '--data_path', type=str, default='data/', help='data path')
 parser.add_argument('-cl', '--classes', type=int, default=21, help='number of classes')
-# parser.add_argument('-lw', '--load_weights', type=str2bool, default=True, help='load weights from existing file')
 parser.add_argument('-wf', '--weights_file', type=str, default='test.hdf5', help='weights file')
 
 args = parser.parse_args()
@@ -43,31 +39,22 @@ print("Weights loaded!")
 
 """PREDICTING"""
 if ISDIR:
-    image_names = os.listdir(PATH)
+    image_names = sorted(os.listdir(PATH))
 
-    print(f"Reading images from {PATH}...")
-    images = []
+    print(f"Predicting images from {PATH}...")
     for image_name in tqdm(image_names):
+        # Reading stage
         image = read_image(PATH + image_name, decode=False)     # read image
-        image = image.astype(np.uint8)                          # convert to uint8 for saving memory
-        images.append(image)                                    # append to images list
-    images = np.array(images).astype(np.uint8)                  # convert images list into numpy array
-
-    print("Predicting loaded images...")
-    predictions = []
-    for image in tqdm(images):
-        image = image[None, :]                      # adjust the axis
+        
+        # Prediction stage
+        image = image[None, :]
         prediction = model.predict(image)           # predict - output has shape (1, IMAGE_SIZE, IMAGE_SIZE, NUM_OF_CLASSES)
         prediction = np.squeeze(prediction)         # remove the first axis
         prediction = np.argmax(prediction, axis=2)  # argmax the predictions
-        prediction = prediction.astype(np.uint8)    # convert into uint8 for saving memory
-        predictions.append(prediction)              # append to predictions
-    predictions = np.array(predictions).astype(np.uint8)
 
-    print(f"Saving predictions to {SAVE_PATH}...")
-    for i in tqdm(range(len(predictions))):
-        cv2.imwrite(filename=SAVE_PATH + image_names[i], img=predictions[i])
-    print(f"Finished!")
+        # Saving stage
+        cv2.imwrite(filename=SAVE_PATH + image_name, img=prediction)
+    print("Finished!")
 else:
     print("Predicting single image...")
     image = read_image(PATH, decode=False)      # read the image

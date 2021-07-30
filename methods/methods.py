@@ -8,6 +8,16 @@ from tensorflow.python.ops.gen_array_ops import reshape
 from tqdm import tqdm
 from sklearn.model_selection import train_test_split
 
+def meanIoU(masks, preds, num_of_classes=21):
+    IoUs = dict(zip([i for i in range(num_of_classes)], [0 for i in range(num_of_classes)]))
+    for class_idx in tqdm(range(num_of_classes)):
+        union = np.logical_or(masks==class_idx, preds==class_idx).astype(np.uint8)
+        intersection = np.logical_and(masks==class_idx, preds==class_idx).astype(np.uint8)
+        IoUs[class_idx] = np.sum(intersection) / np.sum(union)
+    mean_IoU = sum(IoUs.values()) / num_of_classes
+
+    return mean_IoU
+
 def load_data(path, split=0.1):
     images = sorted(glob(os.path.join(path, "images/*")))       # read original images
     masks = sorted(glob(os.path.join(path, "masks/*")))         # read masks
@@ -39,6 +49,7 @@ def make_dataset(Xs, ys, IMAGE_SIZE=256, skip_counter=1):
     print("Reading RGB images.")
     for img_path in tqdm(Xs[::skip_counter]):
         img = read_image(img_path, image_size=IMAGE_SIZE, decode=False)
+        img = img.astype(np.uint8)
         images.append(img)
     images = np.array(images)
 
@@ -46,6 +57,7 @@ def make_dataset(Xs, ys, IMAGE_SIZE=256, skip_counter=1):
     print("Reading grayscale masks.")
     for mask_path in tqdm(ys[::skip_counter]):
         mask = read_mask(mask_path, image_size=IMAGE_SIZE, decode=False)
+        mask = mask.astype(np.uint8)
         masks.append(mask)        
     masks = np.array(masks)
 
