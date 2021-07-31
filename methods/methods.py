@@ -8,6 +8,28 @@ from glob import glob
 from tensorflow.python.ops.gen_array_ops import reshape
 from tqdm import tqdm
 from sklearn.model_selection import train_test_split
+from tensorflow.keras import backend as K
+
+def get_lr_metric(optimizer):
+    def lr(y_true, y_pred):
+        return optimizer.lr
+    return lr
+
+def recall(y_true, y_pred):
+    y_true = K.ones_like(y_true) 
+    true_positives = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
+    all_positives = K.sum(K.round(K.clip(y_true, 0, 1)))
+    
+    recall = true_positives / (all_positives + K.epsilon())
+    return recall
+
+def precision(y_true, y_pred):
+    y_true = K.ones_like(y_true) 
+    true_positives = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
+    
+    predicted_positives = K.sum(K.round(K.clip(y_pred, 0, 1)))
+    precision = true_positives / (predicted_positives + K.epsilon())
+    return precision
 
 def meanIoU(masks, preds, num_of_classes=21):
     IoUs = dict(zip([i for i in range(num_of_classes)], [0 for i in range(num_of_classes)]))
@@ -46,11 +68,11 @@ def load_data(path, split=0.1, use_percentage=0.1):
     valid_size = int(split * total_size)                        # number of validation images
     test_size = int(split * total_size)                         # number of test images
 
-    train_x, valid_x = train_test_split(images, test_size=valid_size)      # split X into train/val
-    train_y, valid_y = train_test_split(masks, test_size=valid_size)       # split y into train/val
+    train_x, valid_x = train_test_split(images, test_size=valid_size, random_state=42)      # split X into train/val
+    train_y, valid_y = train_test_split(masks, test_size=valid_size, random_state=42)       # split y into train/val
 
-    train_x, test_x = train_test_split(train_x, test_size=test_size)       # split X into train/test
-    train_y, test_y = train_test_split(train_y, test_size=test_size)       # split y into train/test
+    train_x, test_x = train_test_split(train_x, test_size=test_size, random_state=42)       # split X into train/test
+    train_y, test_y = train_test_split(train_y, test_size=test_size, random_state=42)       # split y into train/test
 
     return (train_x, train_y), (valid_x, valid_y), (test_x, test_y)
 
@@ -130,7 +152,7 @@ def str2bool(v):
     else:
         raise argparse.ArgumentTypeError('Boolean value expected.')
     
-def get_class_weights(path, skip_counter=1000):
+def get_class_weights(path, skip_counter=30):
     path += "masks/"                # folder containing masks is "masks"
     os.chdir(path)                  # enter masks
 
@@ -147,7 +169,7 @@ def get_class_weights(path, skip_counter=1000):
 
     class_weights = class_weight.compute_class_weight('balanced', np.unique(mask_labels), mask_labels)      # compute labels
     num_of_classes = np.unique(mask_labels).shape[0]
-    print("Number of classes is ", num_of_classes)
+    print("Number of classes is {}".format(num_of_classes))
     class_weights = dict(zip(range(num_of_classes), list(class_weights)))
     os.chdir("../..")
     return class_weights

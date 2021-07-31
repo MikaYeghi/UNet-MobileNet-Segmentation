@@ -43,6 +43,7 @@ parser.add_argument('-cl', '--classes', type=int, default=21, help='number of cl
 parser.add_argument('-lw', '--load_weights', type=str2bool, default=True, help='load weights from existing file')
 parser.add_argument('-wf', '--weights_file', type=str, default='test.hdf5', help='weights file')
 parser.add_argument('-s', '--split', type=float, default=0.1, help='train/val split')
+parser.add_argument('-up', '--use_percentage', type=float, default=0.5, help='percentage of data to be used')
 
 args = parser.parse_args()
 
@@ -56,6 +57,7 @@ NUM_OF_CLASSES = args.classes       # number of classes to be detected
 LOAD_WEIGHTS = args.load_weights    # True - load weights from the file, False - don't load the saved weights
 WEIGHTS_FILE = args.weights_file    # file with the model weights
 SPLIT = args.split                  # train/val split
+USE_PERCENTAGE = args.use_percentage
 
 print(f"Launching the training file with the following parameters:\n\
         Batch size: {BATCH}\n\
@@ -68,7 +70,7 @@ print(f"Launching the training file with the following parameters:\n\
         Weights file: {WEIGHTS_FILE}")
 
 """TRAINING/LOADING WEIGHTS"""
-(train_x, train_y), (valid_x, valid_y), (test_x, test_y) = load_data(PATH, split=SPLIT, use_percentage=0.2)
+(train_x, train_y), (valid_x, valid_y), (test_x, test_y) = load_data(PATH, split=SPLIT, use_percentage=USE_PERCENTAGE)
 
 weights = get_class_weights(PATH)
 weights = np.array(list(weights.values()))
@@ -95,7 +97,11 @@ if len(valid_x) % BATCH != 0:
 """INITIALIZE MODEL"""
 model = model()
 optimizer = tf.keras.optimizers.Adam(learning_rate=LR)
-model.compile(optimizer=optimizer, loss='categorical_crossentropy', metrics=[MeanIoU(num_classes=NUM_OF_CLASSES)])    # compile the model
+lr_metric = get_lr_metric(optimizer)
+model.compile(optimizer=optimizer, loss='categorical_crossentropy', metrics=[MeanIoU(num_classes=NUM_OF_CLASSES),
+                                                                            recall,
+                                                                            precision,
+                                                                            lr_metric])    # compile the model
 
 if LOAD_WEIGHTS:
     print("Loading weights...")
@@ -105,8 +111,8 @@ if LOAD_WEIGHTS:
 
 """TRAINING PARAMETERS"""
 callbacks = [
-    ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=3),
-    EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True),
+    ReduceLROnPlateau(monitor='val_loss', factor=0.7, patience=3),
+    # EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True),
     ModelCheckpoint(WEIGHTS_FILE, save_best_only=True, monitor='val_loss', mode='min')
 ]
 
@@ -126,7 +132,7 @@ history = model.fit(
 )
 print("Training finished!")
 
-pprint("Training history:\n{}".format(history.history))
+# pprint("Training history:\n{}".format(history.history))
 
 print(f"Saving the model as {WEIGHTS_FILE}...")
 model.save(WEIGHTS_FILE)
