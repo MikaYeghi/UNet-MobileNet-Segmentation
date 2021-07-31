@@ -1,4 +1,4 @@
-import os, sys, argparse
+import os, sys, argparse, time
 from pprint import pprint
 from tensorflow.python.keras.utils.generic_utils import default
 from tqdm import tqdm
@@ -13,6 +13,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.utils import class_weight
 
+from functools import partial
 from methods.methods import *
 from methods.model import *
 from tensorflow.keras.layers import Conv2D, Activation, BatchNormalization
@@ -22,11 +23,12 @@ from tensorflow.keras.applications import MobileNetV2
 from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau, ModelCheckpoint
 from tensorflow.keras.metrics import Recall, Precision, MeanIoU
 from tensorflow.keras import backend as K
+# from tensorflow.keras.optimizers import SGD
 
 
 """SET THE RANDOM SEED"""
-np.random.seed(42)
-tf.random.set_seed(42)
+# np.random.seed(42)
+# tf.random.set_seed(42)
 
 
 """PARSE ARGUMENTS"""
@@ -40,6 +42,7 @@ parser.add_argument('-dp', '--data_path', type=str, default='data/', help='data 
 parser.add_argument('-cl', '--classes', type=int, default=21, help='number of classes')
 parser.add_argument('-lw', '--load_weights', type=str2bool, default=True, help='load weights from existing file')
 parser.add_argument('-wf', '--weights_file', type=str, default='test.hdf5', help='weights file')
+parser.add_argument('-s', '--split', type=float, default=0.1, help='train/val split')
 
 args = parser.parse_args()
 
@@ -52,6 +55,7 @@ PATH = args.data_path               # path to the file with the dataset
 NUM_OF_CLASSES = args.classes       # number of classes to be detected
 LOAD_WEIGHTS = args.load_weights    # True - load weights from the file, False - don't load the saved weights
 WEIGHTS_FILE = args.weights_file    # file with the model weights
+SPLIT = args.split                  # train/val split
 
 print(f"Launching the training file with the following parameters:\n\
         Batch size: {BATCH}\n\
@@ -64,10 +68,17 @@ print(f"Launching the training file with the following parameters:\n\
         Weights file: {WEIGHTS_FILE}")
 
 """TRAINING/LOADING WEIGHTS"""
-(train_x, train_y), (valid_x, valid_y), (test_x, test_y) = load_data(PATH)
+(train_x, train_y), (valid_x, valid_y), (test_x, test_y) = load_data(PATH, split=SPLIT, use_percentage=0.2)
 
-train_dataset = tf_dataset(train_x, train_y, batch=BATCH)
-valid_dataset = tf_dataset(valid_x, valid_y, batch=BATCH)
+weights = get_class_weights(PATH)
+weights = np.array(list(weights.values()))
+weights = weights.astype(np.float16)
+train_weights = np.tile(weights, (len(train_y), IMAGE_SIZE, IMAGE_SIZE, 1)).astype(np.float16)
+valid_weights = np.tile(weights, (len(valid_y), IMAGE_SIZE, IMAGE_SIZE, 1)).astype(np.float16)
+del weights
+
+train_dataset = tf_dataset(train_x, train_y, weights=train_weights, batch=BATCH)
+valid_dataset = tf_dataset(valid_x, valid_y, weights=valid_weights, batch=BATCH)
 
 train_steps = len(train_x)//BATCH
 valid_steps = len(valid_x)//BATCH
@@ -77,15 +88,15 @@ if len(train_x) % BATCH != 0:
 if len(valid_x) % BATCH != 0:
     valid_steps += 1
 
+# train_X, train_y = make_dataset(train_x, train_y)
+# valid_X, valid_y = make_dataset(valid_x, valid_y)
+
 
 """INITIALIZE MODEL"""
 model = model()
-# model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])      # compile the model
-model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=[MeanIoU(num_classes=NUM_OF_CLASSES), 
-                                    tf.keras.metrics.Precision(), 
-                                    tf.keras.metrics.Recall()])    # compile the model
+optimizer = tf.keras.optimizers.Adam(learning_rate=LR)
+model.compile(optimizer=optimizer, loss='categorical_crossentropy', metrics=[MeanIoU(num_classes=NUM_OF_CLASSES)])    # compile the model
 
-# if LOAD_WEIGHTS:
 if LOAD_WEIGHTS:
     print("Loading weights...")
     model.load_weights(WEIGHTS_FILE)
@@ -94,24 +105,28 @@ if LOAD_WEIGHTS:
 
 """TRAINING PARAMETERS"""
 callbacks = [
-    ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=4),
-    EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True),
+    ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=3),
+    EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True),
     ModelCheckpoint(WEIGHTS_FILE, save_best_only=True, monitor='val_loss', mode='min')
 ]
 
 
 """TRAIN"""
+time.sleep(5)
 print("Starting training...")
-model.fit(
+history = model.fit(
     train_dataset,
     validation_data=valid_dataset,
     epochs=EPOCHS,
     steps_per_epoch=train_steps,
     validation_steps=valid_steps,
     callbacks=callbacks,
-    verbose=1
+    verbose=1,
+    shuffle=True
 )
 print("Training finished!")
+
+pprint("Training history:\n{}".format(history.history))
 
 print(f"Saving the model as {WEIGHTS_FILE}...")
 model.save(WEIGHTS_FILE)

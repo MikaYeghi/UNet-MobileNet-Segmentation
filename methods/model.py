@@ -9,10 +9,13 @@ def model(image_size=256, num_of_classes=21):
     # Pre-trained encoder
     encoder = MobileNetV2(input_tensor=inputs, weights="imagenet", include_top=False, alpha=0.35)                   # define the encoder (MobileNetV2)
     skip_connection_names = ["input_image", "block_1_expand_relu", "block_3_expand_relu", "block_6_expand_relu"]    # skip connection layers (concatenated with the upsampling path)
-    encoder_output = encoder.get_layer("block_13_expand_relu").output                                               # (16, 16, 196)
-    
+    encoder_output = encoder.get_layer("block_13_expand_relu").output
+    # for layer in encoder.layers:
+    #     layer.trainable = False
+
     # Decoder
-    f = [32, 48, 64, 96, 128]           # channels
+    # f = [32, 48, 64, 96, 128]           # channels
+    f = [32, 48, 64, 96]
     x = encoder_output                  # encoder output
     
     for i in range(1, len(skip_connection_names)+1, 1):
@@ -32,4 +35,7 @@ def model(image_size=256, num_of_classes=21):
     x = Activation("softmax")(x)                                # softmax activation instead of sigmoid
     
     model = Model(inputs, x)
+    for i, layer in enumerate(model.layers):                    # freeze the encoder part
+        if i < 119:
+            layer.trainable = False
     return model
